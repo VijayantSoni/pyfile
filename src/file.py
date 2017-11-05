@@ -1,12 +1,8 @@
 import os
-import pwd
 from functools import wraps
 
 __author__ = 'Vijayant Soni <vijayant4129@gmail.com>'
 __status__ = 'Development'
-
-
-_username = pwd.getpwuid(os.getuid()).pw_name
 
 
 class FileNotFoundError(Exception):
@@ -46,11 +42,15 @@ def check_file():
 
 class File(object):
     def __init__(self, path):
-        self.path = self.__fix_path(path=path)
+        self.__path = path
+
+    @property
+    def path(self):
+        return self.__fix_path(self.__path)
 
     @staticmethod
     def __fix_path(path):
-        return path.replace('~', '/home/{0}'.format(_username))
+        return os.path.expandvars(os.path.expanduser(path))
 
     # Properties
     @property
@@ -132,16 +132,14 @@ class File(object):
         raise NotImplementedError
 
     def get_line(self, lno=1):
-        content = ''
         if lno < 0 or lno > self.total_lines:
-            return content
+            raise IndexError('Line number {0} does not exist'.format(lno))
 
-        c_lno = 1
-        for line in self:
-            if c_lno == lno:
+        content = ''
+        for idx, line in enumerate(self, start=1):
+            if idx == lno:
                 content = line
                 break
-            c_lno += 1
 
         return content
 
@@ -208,9 +206,8 @@ class File(object):
         if '/' not in new:
             new = os.path.join(self.directory_path, new)
 
-        temp_file = File(path=new)
-        if temp_file.is_file and not overwrite_policy:
-            raise FileAlreadyExists(temp_file.path)
+        if os.path.isfile(new) and not overwrite_policy:
+            raise FileAlreadyExists(new)
 
         self.__rename(new=new)
 
@@ -224,7 +221,6 @@ class File(object):
         if self.path_exists():
             with open(self.path, 'w') as _:
                 pass
-
             return
 
         os.makedirs(self.directory_path)
@@ -237,13 +233,7 @@ class File(object):
     def __rename(self, new):
         os.renames(self.path, new)
 
-        self.__update_path(new=new)
-
-    def __update_path(self, new):
-        if not new.startswith('/home'):
-            new = os.path.join(os.getcwd(), new)
-
-        self.path = new
+        self.__path = new
     # File level behaviours
 
     # Extraction
@@ -260,7 +250,7 @@ class File(object):
 
 
 if __name__ == '__main__':
-    f = File('<file_path>')
+    f = File('<name>')
 
     # Create new file, overwrite if exists
     f.create(overwrite_policy=True)
@@ -291,21 +281,21 @@ if __name__ == '__main__':
         pass
 
     # Get specific line
-    print f.get_line(lno=5)
+    print f.get_line(lno=1)
 
-    # Rename file, overwrite existing file with same name
+    # Rename file, overwrite existing file
     f.rename(new_name='<new_name>', overwrite_policy=True)
 
-    # Rename file, do not overwrite existing file with same name
+    # Rename file, do not overwrite existing file
     try:
         f.rename(new_name='<new_name>', overwrite_policy=False)
     except FileAlreadyExists:
         pass
 
-    # Move file to new location, overwrite existing file with same name
+    # Move file to new location, overwrite existing file
     f.move(where='<new_location>', overwrite_policy=True)
 
-    # Move file to new location, do not overwrite existing file with same name
+    # Move file to new location, do not overwrite existing
     try:
         f.move(where='<new_location>', overwrite_policy=False)
     except FileAlreadyExists:
